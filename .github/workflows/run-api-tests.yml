@@ -1,0 +1,41 @@
+name: Run API Automation Tests
+
+on:
+  repository_dispatch:
+    types: [dev-pr-updated]
+  workflow_dispatch:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout automation repo
+        uses: actions/checkout@v4
+
+      - name: Checkout dev repo
+        uses: actions/checkout@v4
+        with:
+          repository: ug2454/DemoDevRepo
+          path: devrepo
+          ref: ${{ github.event.client_payload.head_sha || 'main' }}
+          # token: ${{ secrets.AUTOMATION_REPO_PAT }}   # uncomment if private repo
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install and start dev app
+        run: |
+          pip install -r devrepo/rest-dev-app/requirements.txt
+          nohup uvicorn main:app --app-dir devrepo/rest-dev-app --host 127.0.0.1 --port 8000 > dev.log 2>&1 &
+          sleep 5
+          curl -f http://127.0.0.1:8000/health
+
+      - name: Install test deps and run tests
+        env:
+          DEV_APP_URL: http://127.0.0.1:8000
+        run: |
+          pip install -r rest-automation-tests/requirements.txt
+          cd rest-automation-tests
+          pytest -q
